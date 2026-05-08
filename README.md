@@ -1,4 +1,4 @@
-# 🧠 AI Memory Gateway
+# 🧸 AI Memory Gateway
 
 **让你的 AI 拥有长期记忆。**
 
