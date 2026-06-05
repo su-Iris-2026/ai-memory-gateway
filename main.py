@@ -83,6 +83,13 @@ FORCE_STREAM = os.getenv("FORCE_STREAM", "false").lower() == "true"
 # 设为 low/medium/high 会在转发请求时注入 reasoning_effort 参数
 REASONING_EFFORT = os.getenv("REASONING_EFFORT", "")
 
+# 记忆模型专用 API Key（不设则回退到主 API_KEY）
+# 适用于中转站按模型分组、不同模型需要不同 Key 的场景
+MEMORY_API_KEY = os.getenv("MEMORY_API_KEY", "")
+
+def get_memory_api_key() -> str:
+    return MEMORY_API_KEY or API_KEY
+
 # 额外的请求头（有些 API 需要，比如 OpenRouter 需要 Referer）
 EXTRA_REFERER = os.getenv("EXTRA_REFERER", "https://ai-memory-gateway.local")
 EXTRA_TITLE = os.getenv("EXTRA_TITLE", "AI Memory Gateway")
@@ -194,6 +201,11 @@ async def lifespan(app: FastAPI):
                             restored.append(key)
                         elif key == "MEMORY_MODEL":
                             os.environ["MEMORY_MODEL"] = str(val)
+                            restored.append(key)
+                        elif key == "MEMORY_API_KEY":
+                            globals()[key] = str(val)
+                            import memory_extractor as _me_mod
+                            _me_mod.MEMORY_API_KEY = str(val)
                             restored.append(key)
                     if restored:
                         print(f"🔄 从数据库恢复 {len(restored)} 项面板配置: {', '.join(restored)}")
@@ -357,13 +369,13 @@ async def generate_summary(messages: list, session_id: str = "") -> str:
     
     try:
         headers = {
-            "Authorization": f"Bearer {API_KEY}",
+            "Authorization": f"Bearer {get_memory_api_key()}",
             "Content-Type": "application/json",
         }
         if "openrouter" in API_BASE_URL:
             headers["HTTP-Referer"] = EXTRA_REFERER
             headers["X-Title"] = EXTRA_TITLE
-        
+
         async with httpx.AsyncClient(timeout=60) as client:
             response = await client.post(API_BASE_URL, headers=headers, json={
                 "model": CACHE_SUMMARY_MODEL,
@@ -376,7 +388,7 @@ async def generate_summary(messages: list, session_id: str = "") -> str:
                     summary = data["choices"][0]["message"]["content"].strip()
                     print(f"📝 摘要生成完成: {len(summary)}字 (压缩{len(messages)}条消息)")
                     return summary
-        
+
         print(f"⚠️ 摘要生成失败: HTTP {response.status_code}")
         return ""
     except Exception as e:
@@ -1486,7 +1498,7 @@ async def consolidate_memories_for_date_range(start_date, end_date):
                 response = await client.post(
                     API_BASE_URL,
                     headers={
-                        "Authorization": f"Bearer {API_KEY}",
+                        "Authorization": f"Bearer {get_memory_api_key()}",
                         "Content-Type": "application/json"
                     },
                     json={
@@ -1495,25 +1507,25 @@ async def consolidate_memories_for_date_range(start_date, end_date):
                         "max_tokens": 2000
                     }
                 )
-                
+
                 if response.status_code == 429:
                     wait_time = (attempt + 1) * 10
                     print(f"⚠️ 整理API 429限流，{wait_time}秒后重试（第{attempt+1}次）")
                     last_error = f"429 Too Many Requests (重试{attempt+1}次)"
                     await asyncio.sleep(wait_time)
                     continue
-                
+
                 if response.status_code != 200:
                     last_error = f"HTTP {response.status_code}: {response.text[:200]}"
                     print(f"⚠️ 整理API返回 {response.status_code}: {response.text[:200]}")
                     break
-                
+
                 last_error = None
                 break
-            
+
             if last_error:
                 return {"status": "error", "error": f"API调用失败: {last_error}"}
-            
+
             data = response.json()
             content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
             
@@ -1538,7 +1550,7 @@ async def consolidate_memories_for_date_range(start_date, end_date):
                             fix_resp = await client.post(
                                 API_BASE_URL,
                                 headers={
-                                    "Authorization": f"Bearer {API_KEY}",
+                                    "Authorization": f"Bearer {get_memory_api_key()}",
                                     "Content-Type": "application/json"
                                 },
                                 json={
@@ -2334,6 +2346,8 @@ async def get_settings():
         api_key_raw = db.get("API_KEY") or API_KEY
         embedding_key_raw = db.get("EMBEDDING_API_KEY") or _db_module.EMBEDDING_API_KEY
 
+        memory_key_raw = db.get("MEMORY_API_KEY") or MEMORY_API_KEY
+
         settings = {
             # 基础连接
             "API_BASE_URL":     db.get("API_BASE_URL") or str(API_BASE_URL),
@@ -2342,6 +2356,7 @@ async def get_settings():
 
             # 记忆系统
             "MEMORY_ENABLED":          _parse_bool(db.get("MEMORY_ENABLED"), MEMORY_ENABLED),
+            "MEMORY_API_KEY":          _mask_key(memory_key_raw),
             "MEMORY_MODEL":            db.get("MEMORY_MODEL") or os.environ.get("MEMORY_MODEL", ""),
             "MAX_MEMORIES_INJECT":     int(db.get("MAX_MEMORIES_INJECT") or MAX_MEMORIES_INJECT),
             "MIN_SCORE_THRESHOLD":     float(db.get("MIN_SCORE_THRESHOLD") or _db_module.MIN_SCORE_THRESHOLD),
@@ -2395,6 +2410,7 @@ async def save_settings(request: Request):
             "API_BASE_URL":          str,
             "API_KEY":               str,
             "DEFAULT_MODEL":         str,
+            "MEMORY_API_KEY":        str,
             "MEMORY_ENABLED":        lambda v: _parse_bool(v),
             "MAX_MEMORIES_INJECT":   int,
             "MEMORY_EXTRACT_INTERVAL": int,
@@ -2426,7 +2442,7 @@ async def save_settings(request: Request):
         _ENV_ONLY = {"MEMORY_MODEL": str}
 
         # 打码字段
-        _MASKED_KEYS = {"API_KEY", "EMBEDDING_API_KEY"}
+        _MASKED_KEYS = {"API_KEY", "EMBEDDING_API_KEY", "MEMORY_API_KEY"}
 
         for key, value in data.items():
             # --- 打码字段特殊处理 ---
@@ -2441,6 +2457,9 @@ async def save_settings(request: Request):
                         globals()[key] = ""
                     elif key in _DB_VARS:
                         setattr(_db_module, key, "")
+                    if key == "MEMORY_API_KEY":
+                        import memory_extractor as _me_mod
+                        _me_mod.MEMORY_API_KEY = ""
                     os.environ[key] = ""
                     updated.append(key)
                     continue
@@ -2460,6 +2479,9 @@ async def save_settings(request: Request):
                 typed_value = _MAIN_VARS[key](value)
                 globals()[key] = typed_value
                 os.environ[key] = str(value)
+                if key == "MEMORY_API_KEY":
+                    import memory_extractor as _me_mod
+                    _me_mod.MEMORY_API_KEY = str(value)
                 updated.append(key)
                 print(f"[settings] {key} = {typed_value}")
 

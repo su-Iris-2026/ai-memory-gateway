@@ -15,8 +15,15 @@ from typing import List, Dict
 API_KEY = os.getenv("API_KEY", "")
 API_BASE_URL = os.getenv("API_BASE_URL", "https://openrouter.ai/api/v1/chat/completions")
 
+# 记忆模型专用 API Key（不设则回退到主 API_KEY）
+# 适用于中转站按模型分组、不同模型需要不同 Key 的场景
+MEMORY_API_KEY = os.getenv("MEMORY_API_KEY", "")
+
 # 用来提取记忆的模型（便宜的就行）
 MEMORY_MODEL = os.getenv("MEMORY_MODEL", "anthropic/claude-haiku-4")
+
+def get_memory_api_key() -> str:
+    return MEMORY_API_KEY or API_KEY
 
 
 EXTRACTION_PROMPT = """你是信息提取专家，负责从对话中识别并提取值得长期记住的关键信息。
@@ -112,7 +119,7 @@ async def extract_memories(messages: List[Dict[str, str]], existing_memories: Li
             response = await client.post(
                 API_BASE_URL,
                 headers={
-                    "Authorization": f"Bearer {API_KEY}",
+                    "Authorization": f"Bearer {get_memory_api_key()}",
                     "Content-Type": "application/json",
                     "HTTP-Referer": "https://midsummer-gateway.local",
                     "X-Title": "Midsummer Memory Extraction",
@@ -220,7 +227,7 @@ async def score_memories(texts: List[str]) -> List[Dict]:
             response = await client.post(
                 API_BASE_URL,
                 headers={
-                    "Authorization": f"Bearer {API_KEY}",
+                    "Authorization": f"Bearer {get_memory_api_key()}",
                     "Content-Type": "application/json",
                 },
                 json={
