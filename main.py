@@ -1161,9 +1161,9 @@ async def chat_completions(request: Request):
         )
     else:
         async with httpx.AsyncClient(timeout=300) as client:
-          response = await client.post(f"{API_BASE_URL}/chat/completions", headers=headers, json=body)
+            response = await client.post(f"{API_BASE_URL}/chat/completions", headers=headers, json=body)
             
-          if response.status_code == 200:
+            if response.status_code == 200:
                 resp_data = response.json()
                 assistant_msg = ""
                 assistant_tool_calls = None
@@ -1189,7 +1189,7 @@ async def chat_completions(request: Request):
                     )
                 
                 return JSONResponse(status_code=200, content=resp_data)
-         else:
+            else:
                 return JSONResponse(status_code=response.status_code, content=response.json())
 
 
