@@ -1202,7 +1202,7 @@ async def stream_and_capture(headers: dict, body: dict, session_id: str, user_me
     accumulated_tool_calls = {}  # index -> {id, type, function: {name, arguments}}
     
     async with httpx.AsyncClient(timeout=300) as client:
-        async with client.stream("POST", API_BASE_URL, headers=headers, json=body) as response:
+        async with client.stream("POST", f"{API_BASE_URL}/chat/completions", headers=headers, json=body) as response:
             # 打印上游响应头（排查thinking问题用）
             upstream_ct = response.headers.get("content-type", "")
             print(f"📨 上游响应: status={response.status_code}, content-type={upstream_ct}", flush=True)
