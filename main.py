@@ -1189,7 +1189,7 @@ async def chat_completions(request: Request):
                     )
                 
                 return JSONResponse(status_code=200, content=resp_data)
-            else:
+         else:
                 return JSONResponse(status_code=response.status_code, content=response.json())
 
 
