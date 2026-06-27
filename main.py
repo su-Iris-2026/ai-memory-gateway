@@ -393,6 +393,56 @@ def _strip_cache_control(messages: list):
         print(f"🔧 兼容性处理: 剥离了 {stripped} 个 cache_control 字段（非 Claude 模型）")
 
 
+def _message_text(message: dict) -> str:
+    """Extract text from an OpenAI-compatible message."""
+    content = message.get("content", "")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return " ".join(
+            item.get("text", "")
+            for item in content
+            if isinstance(item, dict) and item.get("type") == "text"
+        )
+    return ""
+
+
+def _is_title_generation_request(messages: list) -> bool:
+    """Detect client-side title generation prompts that must not enter chat history."""
+    user_texts = [
+        _message_text(message).strip()
+        for message in messages
+        if message.get("role") == "user"
+    ]
+    user_texts = [text for text in user_texts if text]
+    if len(user_texts) != 1:
+        return False
+
+    text = user_texts[0].lower()
+    strong_signatures = (
+        "summarize the conversation between user and assistant into a short title",
+        "summarize the conversation into a short title",
+        "generate a concise title for the conversation",
+        "generate a short title for the conversation",
+    )
+    if any(signature in text for signature in strong_signatures):
+        return True
+
+    # Some clients localize or slightly rewrite the boilerplate. Requiring three
+    # independent markers avoids treating an ordinary title request as metadata.
+    marker_groups = (
+        ("<content>", "</content>"),
+        ("reply directly with the title", "only output the title", "只输出标题", "直接输出标题"),
+        ("title should not exceed", "title must not exceed", "标题不超过", "标题不得超过"),
+        ("conversation between user and assistant", "dialogue between user and assistant", "用户和助手的对话", "用户与助手的对话"),
+        ("short title", "concise title", "简短标题", "简洁标题"),
+    )
+    matched_groups = sum(
+        1 for markers in marker_groups if any(marker in text for marker in markers)
+    )
+    return matched_groups >= 3
+
+
 def build_time_injection() -> str:
     """构建时间注入文本（东八区）"""
     now_utc = datetime.now(timezone.utc)
@@ -580,7 +630,7 @@ async def build_partitioned_messages(
     a_start_round = state['a_start_round']
     
     if total_rounds < X:
-        return await _build_basic_cached(history, base_prompt, user_message, current_user_msg)
+        return await _build_basic_cached(history, base_prompt, user_message, current_user_msg, summary_parts)
     
     # 计算A/B区（按逻辑轮切片）
     a_end_round = a_start_round + X
@@ -692,14 +742,28 @@ async def _build_basic_cached(
     base_prompt: str,
     user_message: str,
     current_user_msg: dict,
+    summary_parts: list = None,
 ) -> list:
     """基础版prompt caching（历史不够分区时的降级模式）"""
+    summary_parts = summary_parts or []
     result = []
     if base_prompt:
         result.append({
             "role": "system",
             "content": [{"type": "text", "text": base_prompt, "cache_control": {"type": "ephemeral"}}]
         })
+
+    # 新建/继承的对话线在历史不足 X 轮时也必须读到继承摘要。
+    # 否则 dashboard 和 DB 都显示摘要存在，但首轮请求不会注入。
+    if summary_parts:
+        blocks = [{"type": "text", "text": "[以下是之前对话的摘要，帮助你回忆上下文]"}]
+        for i, part in enumerate(summary_parts):
+            item = {"type": "text", "text": part}
+            if i == len(summary_parts) - 1:
+                item["cache_control"] = {"type": "ephemeral"}
+            blocks.append(item)
+        result.append({"role": "user", "content": blocks})
+        result.append({"role": "assistant", "content": "好的，我已了解之前的对话内容。"})
     
     h_cleaned = [{k: v for k, v in msg.items() if k not in ('created_at',)} for msg in history]
     
@@ -729,8 +793,9 @@ async def _build_basic_cached(
         parts.append(current_text)
         result.append({"role": "user", "content": "\n\n".join(parts)})
     
-    bp_count = 1 + (1 if history else 0)
-    print(f"🔒 基础缓存(降级): BP×{bp_count} | 历史{len(history)}条 | 总{len(result)}条messages")
+    summary_total = sum(len(p) for p in summary_parts)
+    bp_count = 1 + (1 if summary_parts else 0) + (1 if history else 0)
+    print(f"🔒 基础缓存(降级): BP×{bp_count} | 摘要{'有' if summary_parts else '无'}({len(summary_parts)}段/{summary_total}字) | 历史{len(history)}条 | 总{len(result)}条messages")
     return result
 
 
@@ -971,8 +1036,12 @@ async def chat_completions(request: Request):
     messages = body.get("messages", [])
     
     # ---------- 检测是否应跳过对话存储 ----------
-    # 客户端通过header显式声明（如标题生成等辅助请求）
-    skip_conversation_log = request.headers.get("X-Skip-Conversation-Log", "").lower() == "true"
+    # 优先尊重客户端显式声明；无法加 header 的客户端则识别其标题生成模板。
+    explicit_skip = request.headers.get("X-Skip-Conversation-Log", "").lower() == "true"
+    auxiliary_title_request = _is_title_generation_request(messages)
+    skip_conversation_log = explicit_skip or auxiliary_title_request
+    if auxiliary_title_request:
+        print("⏭️  检测到标题生成请求：跳过分区缓存、记忆注入、对话存储和会话 Token 统计")
     
     # ---------- 提取用户最新消息 ----------
     user_message = ""
@@ -1001,7 +1070,7 @@ async def chat_completions(request: Request):
     session_id = str(uuid.uuid4())[:8]
     
     # ---------- 分区缓存模式 ----------
-    if CACHE_PARTITION_ENABLED:
+    if CACHE_PARTITION_ENABLED and not skip_conversation_log:
         active_sid = get_active_session_id()
         if active_sid:
             session_id = active_sid
@@ -1091,7 +1160,7 @@ async def chat_completions(request: Request):
     
     else:
         # ---------- 原有逻辑：system prompt + 记忆注入 ----------
-        if SYSTEM_PROMPT or (MEMORY_ENABLED and MEMORY_EXTRACT_ENABLED and user_message):
+        if not skip_conversation_log and (SYSTEM_PROMPT or (MEMORY_ENABLED and MEMORY_EXTRACT_ENABLED and user_message)):
             if MEMORY_ENABLED and MEMORY_EXTRACT_ENABLED and user_message:
                 enhanced_prompt = await build_system_prompt_with_memories(user_message)
             else:
@@ -1138,7 +1207,7 @@ async def chat_completions(request: Request):
         print(f"⚡ 强制开启流式传输（FORCE_STREAM=true）")
     
     # 注入推理参数（解决客户端走网关时不带reasoning参数的问题）
-    if REASONING_EFFORT:
+    if REASONING_EFFORT and not skip_conversation_log:
         # 统一用 reasoning_effort（Claude/OpenAI/Google Gemini OpenAI兼容端点都支持）
         # 先删除客户端可能已带的值，确保用我们配置的
         body.pop("reasoning_effort", None)
@@ -1287,7 +1356,7 @@ async def stream_and_capture(headers: dict, body: dict, session_id: str, user_me
         pt = stream_usage.get("prompt_tokens", 0)
         ct = stream_usage.get("completion_tokens", 0)
         tt = stream_usage.get("total_tokens", 0)
-        if tt > 0:
+        if tt > 0 and not skip_conversation_log:
             asyncio.create_task(save_token_usage(session_id, model, pt, ct, tt))
             print(f"📊 Stream Token: {pt} + {ct} = {tt}")
     

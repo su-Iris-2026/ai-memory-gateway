@@ -1629,7 +1629,19 @@ async function createThread() {
             return;
         }
         
-        msgEl.innerHTML = `<div style="color: var(--success);">✅ 创建成功${data.summary_length > 0 ? '（继承了' + data.summary_length + '字摘要）' : ''}</div>`;
+        const switchResp = await fetch('/api/partition/switch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ session_id: newId })
+        });
+        const switchData = await switchResp.json();
+        if (switchData.error) {
+            msgEl.innerHTML = `<div style="color: var(--danger);">创建成功，但切换失败: ${switchData.error}</div>`;
+            loadThreads();
+            return;
+        }
+
+        msgEl.innerHTML = `<div style="color: var(--success);">✅ 创建并切换成功${data.summary_length > 0 ? '（继承了' + data.summary_length + '字摘要）' : ''}</div>`;
         document.getElementById('new-thread-id').value = '';
         loadThreads();
     } catch(e) {
