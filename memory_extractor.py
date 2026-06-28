@@ -13,8 +13,7 @@ import httpx
 from typing import List, Dict
 
 API_KEY = os.getenv("API_KEY", "")
-API_BASE_URL = os.getenv("API_BASE_URL", "https://openrouter.ai/api/v1/chat/completions")
-
+API_BASE_URL = os.getenv("API_BASE_URL", "https://openrouter.ai/api/v1")
 # 记忆模型专用 API Key（不设则回退到主 API_KEY）
 # 适用于中转站按模型分组、不同模型需要不同 Key 的场景
 MEMORY_API_KEY = os.getenv("MEMORY_API_KEY", "")
@@ -117,7 +116,7 @@ async def extract_memories(messages: List[Dict[str, str]], existing_memories: Li
     try:
         async with httpx.AsyncClient(timeout=60) as client:
             response = await client.post(
-                API_BASE_URL,
+                f"{API_BASE_URL}/chat/completions",
                 headers={
                     "Authorization": f"Bearer {get_memory_api_key()}",
                     "Content-Type": "application/json",
@@ -225,7 +224,7 @@ async def score_memories(texts: List[str]) -> List[Dict]:
     try:
         async with httpx.AsyncClient(timeout=60) as client:
             response = await client.post(
-                API_BASE_URL,
+                f"{API_BASE_URL}/chat/completions",
                 headers={
                     "Authorization": f"Bearer {get_memory_api_key()}",
                     "Content-Type": "application/json",
