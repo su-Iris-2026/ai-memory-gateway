@@ -720,14 +720,14 @@ async def build_partitioned_messages(
                 parts.append(mem_text)
         
         current_content = current_user_msg['content']
-            if isinstance(current_content, list):
-                # 多模态消息（含图片），保留原始格式，只在开头插入时间和记忆
-                prefix = "\n\n".join(parts)
-                new_content = [{"type": "text", "text": prefix}] + current_content
-                result.append({"role": "user", "content": new_content})
-            else:
-                parts.append(current_content)
-                result.append({"role": "user", "content": "\n\n".join(parts)})
+        if isinstance(current_content, list):
+            # 多模态消息（含图片），保留原始格式，只在开头插入时间和记忆
+            prefix = "\n\n".join(parts)
+            new_content = [{"type": "text", "text": prefix}] + current_content
+            result.append({"role": "user", "content": new_content})
+        else:
+            parts.append(current_content)
+            result.append({"role": "user", "content": "\n\n".join(parts)})
     
     bp_count = 1 + (1 if summary_parts else 0) + (1 if cleaned_a else 0) + (1 if b_msgs else 0)
     summary_total = sum(len(p) for p in summary_parts)
