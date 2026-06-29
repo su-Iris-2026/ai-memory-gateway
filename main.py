@@ -482,7 +482,7 @@ async def generate_summary(messages: list, session_id: str = "") -> str:
             headers["X-Title"] = EXTRA_TITLE
 
         async with httpx.AsyncClient(timeout=60) as client:
-            response = await client.post(API_BASE_URL, headers=headers, json={
+            response = await client.post(f"{API_BASE_URL}/chat/completions", headers=headers, json={
                 "model": CACHE_SUMMARY_MODEL,
                 "max_tokens": 500,
                 "messages": [{"role": "user", "content": prompt}],
