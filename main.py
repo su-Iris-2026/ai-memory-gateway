@@ -1032,6 +1032,18 @@ async def chat_completions(request: Request):
             content={"error": "API_KEY 未设置，请在环境变量中配置"},
         )
     
+    try:
+        return await _chat_completions_inner(request)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"error": {"message": f"Gateway internal error: {type(e).__name__}: {e}", "type": "gateway_error"}},
+        )
+
+
+async def _chat_completions_inner(request: Request):
     body = await request.json()
     messages = body.get("messages", [])
     
@@ -1259,7 +1271,11 @@ async def chat_completions(request: Request):
                 
                 return JSONResponse(status_code=200, content=resp_data)
             else:
-                return JSONResponse(status_code=response.status_code, content=response.json())
+                try:
+                    error_content = response.json()
+                except Exception:
+                    error_content = {"error": {"message": response.text[:500], "type": "upstream_error"}}
+                return JSONResponse(status_code=response.status_code, content=error_content)
 
 
 async def stream_and_capture(headers: dict, body: dict, session_id: str, user_message: str, model: str, original_messages: list = None, skip_conversation_log: bool = False, tool_messages: list = None):
