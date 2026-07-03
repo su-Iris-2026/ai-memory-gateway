@@ -1349,10 +1349,10 @@ async function saveMessageEdit(msgId) {
 async function deleteSingleMessage(msgId) {
     if (!confirm('确定删除这条消息？此操作不可撤销。')) return;
     try {
-        const resp = await fetch('/api/messages/' + msgId, { method: 'DELETE' });
+        const resp = await fetch('/api/chat/messages/' + msgId, { method: 'DELETE' });
         const data = await resp.json();
-        if (data.error) {
-            alert('删除失败: ' + data.error);
+        if (!resp.ok || data.error) {
+            alert('删除失败: ' + (data.error || 'HTTP ' + resp.status));
             return;
         }
         const msgEl = document.getElementById('msg-' + msgId);

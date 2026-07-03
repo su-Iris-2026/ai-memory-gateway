@@ -584,6 +584,17 @@ async def update_message_content(message_id: int, new_content: str):
         return int(result.split()[-1]) if result else 0
 
 
+async def delete_single_message(message_id: int):
+    """删除单条对话消息（硬删除）"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            "DELETE FROM conversations WHERE id = $1",
+            message_id,
+        )
+        return int(result.split()[-1]) if result else 0
+
+
 # ============================================================
 # 记忆操作
 # ============================================================
