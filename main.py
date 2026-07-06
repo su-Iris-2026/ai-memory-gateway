@@ -1245,6 +1245,7 @@ async def _chat_completions_inner(request: Request):
         # 先删除客户端可能已带的值，确保用我们配置的
         body.pop("reasoning_effort", None)
         body.pop("google", None)
+        body.pop("reasoning", None)
         body["reasoning_effort"] = REASONING_EFFORT
         print(f"🧠 注入推理参数: reasoning_effort={REASONING_EFFORT}")
     
