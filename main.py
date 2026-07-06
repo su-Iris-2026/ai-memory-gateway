@@ -1065,7 +1065,9 @@ async def _chat_completions_inner(request: Request):
         print("⏭️  检测到标题生成请求：跳过分区缓存、记忆注入、对话存储和会话 Token 统计")
     
     # ---------- 提取用户最新消息 ----------
+    # ---------- 提取用户最新消息 ----------
     user_message = ""
+    has_image = False  # 新增
     for msg in reversed(messages):
         if msg.get("role") == "user":
             content = msg.get("content", "")
@@ -1076,7 +1078,17 @@ async def _chat_completions_inner(request: Request):
                     item.get("text", "") for item in content
                     if isinstance(item, dict) and item.get("type") == "text"
                 )
+                # 新增：检测是否有图片block
+                has_image = any(
+                    item.get("type") in ("image_url", "image")
+                    for item in content
+                    if isinstance(item, dict)
+                )
             break
+
+    # 新增：有图片就加标记
+    if has_image:
+        user_message = user_message + "\n[用户发送了一张图片]" if user_message else "[用户发送了一张图片]"
     
     # ---------- 构建 system prompt ----------
     # 先保存原始对话消息（不含 system prompt），用于记忆提取
