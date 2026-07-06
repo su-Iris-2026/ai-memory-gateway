@@ -794,13 +794,13 @@ async def _build_basic_cached(
                 parts.append(mem_text)
         
         current_content = current_user_msg['content']
-            if isinstance(current_content, list):
-                prefix = "\n\n".join(parts)
-                new_content = [{"type": "text", "text": prefix}] + current_content
-                result.append({"role": "user", "content": new_content})
-            else:
-                parts.append(current_content)
-                result.append({"role": "user", "content": "\n\n".join(parts)})
+        if isinstance(current_content, list):
+            prefix = "\n\n".join(parts)
+            new_content = [{"type": "text", "text": prefix}] + current_content
+            result.append({"role": "user", "content": new_content})
+        else:
+            parts.append(current_content)
+            result.append({"role": "user", "content": "\n\n".join(parts)})
     
     summary_total = sum(len(p) for p in summary_parts)
     bp_count = 1 + (1 if summary_parts else 0) + (1 if history else 0)
