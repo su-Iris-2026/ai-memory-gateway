@@ -343,7 +343,7 @@ async def build_system_prompt_with_memories(user_message: str) -> str:
         
         enhanced_prompt = f"""{SYSTEM_PROMPT}
 
-【从过往对话中检索到的相关记忆】
+【我记得的一些事】
 {memory_text}
 
 # 记忆应用
@@ -831,7 +831,7 @@ async def build_memory_text(user_message: str) -> str:
             memory_lines.append(f"- {date_str}{mem['content']}")
         
         print(f"📚 注入了 {len(memories)} 条相关记忆")
-        return "【从过往对话中检索到的相关记忆】\n" + "\n".join(memory_lines)
+        return "【我记得的一些事】\n" + "\n".join(memory_lines)
     except Exception as e:
         print(f"⚠️ 记忆检索失败: {e}")
         return ""
