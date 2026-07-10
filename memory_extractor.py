@@ -75,11 +75,13 @@ EXTRACTION_PROMPT = """你是记忆整理助手，负责从对话中提取值得
 
 # 输出格式
 
+# 输出格式
+
 只返回 JSON，不要其他内容：
 
 [
-  {"content": "记忆内容（第一人称，有情境）", "importance": 分数},
-  {"content": "记忆内容", "importance": 分数}
+  {{"content": "记忆内容（第一人称，有情境）", "importance": 分数}},
+  {{"content": "记忆内容", "importance": 分数}}
 ]
 
 importance 分数 1-10：
