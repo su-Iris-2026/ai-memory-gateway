@@ -699,7 +699,7 @@ async def build_partitioned_messages(
     for msg in a_msgs:
         if msg.get('role') == 'tool':
             continue
-        m = {k: v for k, v in msg.items() if k not in ('created_at', 'tool_calls')}
+        m = {k: v for k, v in msg.items() if k not in ('created_at', 'tool_calls', 'tool_call_id')}
         if m.get('role') == 'assistant' and not (m.get('content') or '').strip():
             continue
         cleaned_a.append(m)
