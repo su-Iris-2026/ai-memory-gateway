@@ -713,6 +713,7 @@ async def build_partitioned_messages(
         result.append(m)
     
     # B区：先构建去掉created_at的副本，再从末尾往前打BP
+    b_msgs = [msg for msg in b_msgs if msg.get('role') != 'tool']
     b_cleaned = [{k: v for k, v in msg.items() if k not in ('created_at', 'tool_calls', 'tool_call_id')} for msg in b_msgs]
     
     for j in range(len(b_cleaned) - 1, -1, -1):
