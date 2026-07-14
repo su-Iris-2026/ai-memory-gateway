@@ -720,8 +720,7 @@ async def build_partitioned_messages(
         result.append(m)
     
     # B区：先构建去掉created_at的副本，再从末尾往前打BP
-    b_msgs = [msg for msg in b_msgs if msg.get('role') != 'tool']
-    b_cleaned = [{k: v for k, v in msg.items() if k not in ('created_at', 'tool_calls', 'tool_call_id')} for msg in b_msgs]
+    b_cleaned = [{k: v for k, v in msg.items() if k not in ('created_at', 'tool_calls')} for msg in b_msgs]
     
     for j in range(len(b_cleaned) - 1, -1, -1):
         if b_cleaned[j].get('role') != 'tool' and _apply_breakpoint(b_cleaned[j]):
@@ -1143,7 +1142,7 @@ async def _chat_completions_inner(request: Request):
         client_tools = [m for m in client_new_msgs if m.get("role") == "tool"]
         if client_tools:
             # 判断DB是否处于"等待tool结果"状态（最后一条是assistant(tool_calls)）
-            db_last = next((m for m in reversed(db_msgs) if m.get("role") == "assistant"), None)
+            db_last = db_msgs[-1] if db_msgs else None
             db_expecting_tool = (db_last and db_last.get("role") == "assistant" and db_last.get("tool_calls"))
             
             if not db_expecting_tool:
