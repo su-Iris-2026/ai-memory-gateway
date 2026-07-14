@@ -1143,8 +1143,7 @@ async def _chat_completions_inner(request: Request):
         if client_tools:
             # 判断DB是否处于"等待tool结果"状态（最后一条是assistant(tool_calls)）
             db_last = db_msgs[-1] if db_msgs else None
-            db_last_meta = json.loads(db_last.get("metadata") or "{}") if db_last else {}
-            db_expecting_tool = (db_last and db_last.get("role") == "assistant" and db_last_meta.get("tool_calls"))
+            db_expecting_tool = (db_last and db_last.get("role") == "assistant" and db_last.get("tool_calls"))
             
             if not db_expecting_tool:
                 # DB不在等待tool结果 → 客户端的所有tool都是历史残留（含手动删除后的幽灵）
@@ -1153,7 +1152,7 @@ async def _chat_completions_inner(request: Request):
                 client_new_msgs = [m for m in client_new_msgs if m.get("role") != "tool"]
             else:
                 # DB在等待tool → 只保留匹配当前轮次assistant(tool_calls)的tool
-                expected_tool_ids = {tc.get("id") for tc in db_last_meta.get("tool_calls", []) if tc.get("id")}
+                expected_tool_ids = {tc.get("id") for tc in db_last.get("tool_calls", []) if tc.get("id")}
                 new_tools = [m for m in client_tools if m.get("tool_call_id") in expected_tool_ids]
                 stale_tools = [m for m in client_tools if m.get("tool_call_id") not in expected_tool_ids]
                 
