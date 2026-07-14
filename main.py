@@ -1152,9 +1152,14 @@ async def _chat_completions_inner(request: Request):
                 client_new_msgs = [m for m in client_new_msgs if m.get("role") != "tool"]
             else:
                 # DB在等待tool → 只保留匹配当前轮次assistant(tool_calls)的tool
-                expected_tool_ids = {tc.get("id") for tc in db_last.get("tool_calls", []) if tc.get("id")}
-                new_tools = [m for m in client_tools if m.get("tool_call_id") in expected_tool_ids]
-                stale_tools = [m for m in client_tools if m.get("tool_call_id") not in expected_tool_ids]
+                # 新的：按DB历史去重，不做ID格式匹配
+                existing_tool_call_ids = {
+                    m.get("tool_call_id")
+                    for m in db_msgs
+                    if m.get("role") == "tool" and m.get("tool_call_id")
+                }
+                new_tools = [m for m in client_tools if m.get("tool_call_id") not in existing_tool_call_ids]
+                stale_tools = [m for m in client_tools if m.get("tool_call_id") in existing_tool_call_ids]
                 
                 if stale_tools:
                     print(f"🔧 去重: 丢弃{len(stale_tools)}条非当前轮次tool (ids: {[m.get('tool_call_id','?') for m in stale_tools]})")
