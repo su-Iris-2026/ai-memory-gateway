@@ -618,14 +618,21 @@ async def build_partitioned_messages(
     # 防止DB里的重复tool消息导致消息乱序
     cleaned = []
     orphan_count = 0
-    for msg in history:
+    for i, msg in enumerate(history):
         if msg.get('role') == 'tool':
             prev = cleaned[-1] if cleaned else None
-            if prev and (prev.get('role') == 'tool' or 
-                        (prev.get('role') == 'assistant' and prev.get('tool_calls'))):
+            if prev and (prev.get('role') == 'tool' or
+                    (prev.get('role') == 'assistant' and prev.get('tool_calls'))):
                 cleaned.append(msg)
             else:
                 orphan_count += 1
+        elif msg.get('role') == 'assistant' and msg.get('tool_calls'):
+            next_msg = history[i + 1] if i + 1 < len(history) else None
+            if next_msg and next_msg.get('role') == 'tool':
+                cleaned.append(msg)
+            else:
+                stripped = {k: v for k, v in msg.items() if k != 'tool_calls'}
+                cleaned.append(stripped)
         else:
             cleaned.append(msg)
     if orphan_count > 0:
