@@ -782,7 +782,7 @@ async def _build_basic_cached(
         result.append({"role": "user", "content": blocks})
         result.append({"role": "assistant", "content": "好的，我已了解之前的对话内容。"})
     
-    h_cleaned = [{k: v for k, v in msg.items() if k not in ('created_at', 'tool_calls', 'tool_call_id')} for msg in history]
+    h_cleaned = [{k: v for k, v in msg.items() if k not in ('created_at', 'tool_calls')} for msg in history]
     
     # 从末尾往前找第一条非tool消息打BP
     for j in range(len(h_cleaned) - 1, -1, -1):
