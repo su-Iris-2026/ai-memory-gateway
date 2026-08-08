@@ -42,7 +42,7 @@ API_KEY = os.getenv("API_KEY", "")
 # OpenRouter: https://openrouter.ai/api/v1/chat/completions
 # OpenAI:     https://api.openai.com/v1/chat/completions
 # 本地 Ollama: http://localhost:11434/v1/chat/completions
-API_BASE_URL = os.getenv("API_BASE_URL", "https://openrouter.ai/api/v1/chat/completions")
+API_BASE_URL = os.getenv("", "https://openrouter.ai/api/v1/chat/completions")
 
 # 默认模型（如果客户端没指定就用这个）
 DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "anthropic/claude-sonnet-4")
@@ -596,7 +596,7 @@ async def generate_summary(messages: list, session_id: str = "") -> str:
             headers["X-Title"] = EXTRA_TITLE
 
         async with httpx.AsyncClient(timeout=60) as client:
-            response = await client.post(API_BASE_URL, headers=headers, json={
+            response = await client.post(f"{API_BASE_URL}/chat/completions", headers=headers, json={
                 "model": CACHE_SUMMARY_MODEL,
                 # 推理模型的思考也消耗max_tokens，给足空间避免content为空
                 "max_tokens": CACHE_SUMMARY_MAX_TOKENS,
@@ -960,7 +960,7 @@ async def build_memory_text(user_message: str) -> str:
         print(f"📚 注入了 {len(memories)} 条相关记忆")
         return (
             "<retrieved_memories>\n"
-            "以下是网关从过往对话中自动检索的相关记忆，供参考，非用户本次输入：\n"
+            "以下是我记得的一些事，供参考，非Iris本次输入：\n"
             + "\n".join(memory_lines)
             + "\n</retrieved_memories>"
         )
@@ -1214,6 +1214,20 @@ async def _chat_completions_inner(request: Request):
                     if isinstance(item, dict) and item.get("type") == "text"
                 )
             break
+
+    has_image = False
+    for msg in reversed(messages):
+        if msg.get("role") == "user":
+            content = msg.get("content", "")
+            if isinstance(content, list):
+                has_image = any(
+                    item.get("type") in ("image_url", "image")
+                    for item in content
+                    if isinstance(item, dict)
+                )
+            break
+    if has_image:
+        user_message = user_message + "\n[用户发送了一张图片]" if user_message else "[用户发送了一张图片]"
     
     # ---------- 构建 system prompt ----------
     # 先保存原始对话消息（不含 system prompt），用于记忆提取
@@ -1410,6 +1424,7 @@ async def _chat_completions_inner(request: Request):
         # 先删除客户端可能已带的值，确保用我们配置的
         body.pop("reasoning_effort", None)
         body.pop("google", None)
+        body.pop("reasoning", None)
         body["reasoning_effort"] = REASONING_EFFORT
         print(f"🧠 注入推理参数: reasoning_effort={REASONING_EFFORT}")
     
@@ -1428,7 +1443,7 @@ async def _chat_completions_inner(request: Request):
         )
     else:
         async with httpx.AsyncClient(timeout=300) as client:
-            response = await client.post(API_BASE_URL, headers=headers, json=body)
+            response = await client.post(f"{API_BASE_URL}/chat/completions", headers=headers, json=body)
             
             if response.status_code == 200:
                 resp_data = response.json()
@@ -1473,7 +1488,7 @@ async def stream_and_capture(headers: dict, body: dict, session_id: str, user_me
     accumulated_tool_calls = {}  # index -> {id, type, function: {name, arguments}}
     
     async with httpx.AsyncClient(timeout=300) as client:
-        async with client.stream("POST", API_BASE_URL, headers=headers, json=body) as response:
+        async with client.stream("POST", f"{API_BASE_URL}/chat/completions", headers=headers, json=body) as response:
             # 打印上游响应头（排查thinking问题用）
             upstream_ct = response.headers.get("content-type", "")
             print(f"📨 上游响应: status={response.status_code}, content-type={upstream_ct}", flush=True)
@@ -1871,7 +1886,7 @@ async def _post_consolidation_completion(client, prompt, model, max_tokens, labe
     last_error = None
     for attempt in range(3):
         response = await client.post(
-            API_BASE_URL,
+            f"{API_BASE_URL}/chat/completions",
             headers={
                 "Authorization": f"Bearer {get_memory_api_key()}",
                 "Content-Type": "application/json"
