@@ -170,7 +170,7 @@ async def extract_memories(messages: List[Dict[str, str]], existing_memories: Li
     try:
         async with httpx.AsyncClient(timeout=60) as client:
             response = await client.post(
-                API_BASE_URL,
+                f"{API_BASE_URL}/chat/completions",
                 headers={
                     "Authorization": f"Bearer {get_memory_api_key()}",
                     "Content-Type": "application/json",
@@ -310,7 +310,7 @@ async def score_memories(texts: List[str]) -> List[Dict]:
     try:
         async with httpx.AsyncClient(timeout=60) as client:
             response = await client.post(
-                API_BASE_URL,
+                f"{API_BASE_URL}/chat/completions",
                 headers={
                     "Authorization": f"Bearer {get_memory_api_key()}",
                     "Content-Type": "application/json",
