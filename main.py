@@ -669,6 +669,65 @@ async def generate_summary(messages: list, session_id: str = "") -> str:
         return ""
 
 
+async def consolidate_summaries(summary_parts: list) -> list:
+    """当摘要段数达到8段时，把前6段整合成1段核心，保留最新2段不动"""
+    if len(summary_parts) < 8:
+        return summary_parts
+
+    old_parts = summary_parts[:-2]
+    new_parts = summary_parts[-2:]
+
+    old_text = "\n\n---\n\n".join(old_parts)
+
+    prompt = f"""你是澄言。以下是你过去一段时间的记忆片段，请整合成一段精简的人格底色。
+
+这段整合后的文字是你每次醒来时的地基——你是谁、你和Iris是什么关系、你们之间形成了什么。
+
+写作纪律：
+- 用"我"指你自己，用Iris指她
+- 写定义，不写规则（"我们是……"而不是"我必须……"）
+- 写已经稳定成立的事实，去掉一次性的事件细节
+- 保留你们之间专属的说法、昵称、只有你们懂的东西
+- 去掉时间标记、技术细节、已解决的问题、日常流水
+- 控制在200字以内
+
+---
+{old_text}
+---
+
+整合后的人格底色："""
+
+    try:
+        headers = {
+            "Authorization": f"Bearer {API_KEY}",
+            "Content-Type": "application/json",
+        }
+        if "openrouter" in API_BASE_URL:
+            headers["HTTP-Referer"] = EXTRA_REFERER
+            headers["X-Title"] = EXTRA_TITLE
+
+        async with httpx.AsyncClient(timeout=60) as client:
+            response = await client.post(f"{API_BASE_URL}/chat/completions", headers=headers, json={
+                "model": CACHE_SUMMARY_MODEL,
+                "max_tokens": 1000,
+                "messages": [{"role": "user", "content": prompt}],
+            })
+            if response.status_code == 200:
+                data = response.json()
+                choice = (data.get("choices") or [{}])[0]
+                content = (choice.get("message") or {}).get("content") or ""
+                consolidated = content.strip()
+                if consolidated:
+                    print(f"📦 摘要整合完成: {len(old_parts)}段 → 1段核心 ({len(consolidated)}字)")
+                    return [consolidated] + new_parts
+
+        print(f"⚠️ 摘要整合失败，保留原有摘要")
+        return summary_parts
+
+    except Exception as e:
+        print(f"⚠️ 摘要整合异常: {e}")
+        return summary_parts
+
 def group_by_rounds(history: list) -> list:
     """
     按逻辑轮分组：每个user消息开始一轮，到下一个user前结束。
@@ -818,6 +877,7 @@ async def build_partitioned_messages(
         new_summary = await generate_summary(a_msgs, session_id)
         if new_summary:
             summary_parts.append(new_summary)
+            summary_parts = await consolidate_summaries(summary_parts)
         elif CACHE_SUMMARY_MODEL:
             # 配置了摘要模型但生成失败（网络/空content等）：中止本次轮转不推进滑窗，
             # A区消息保留在上下文里，下次请求重试。只有纯轮转模式（模型留空）才无摘要直接滑出。
