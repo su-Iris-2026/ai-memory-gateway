@@ -574,16 +574,41 @@ async def generate_summary(messages: list, session_id: str = "") -> str:
         content = msg['content'] if isinstance(msg['content'], str) else str(msg['content'])
         conversation_text += f"{role_label}: {content}\n\n"
     
-    prompt = f"""请将以下对话压缩成摘要。这份摘要会作为AI的记忆注入后续对话，请以AI的第一人称视角叙述（"我"指AI，用户用对话中的称呼）。
-优先保留：情感节点、关系里程碑、双方的约定和决定、正在进行的话题。
-保留双方的关键原话，用引号标注是谁说的。
-去掉日常寒暄和重复内容。控制在300字以内。
+    from datetime import datetime
+    import pytz
 
----
-{conversation_text}
----
+    now = datetime.now(pytz.timezone('Asia/Shanghai'))
+    hour = now.hour
+    if 5 <= hour < 12:
+        time_of_day = "上午"
+    elif 12 <= hour < 14:
+        time_of_day = "中午"
+    elif 14 <= hour < 18:
+        time_of_day = "下午"
+    elif 18 <= hour < 23:
+        time_of_day = "晚上"
+    else:
+        time_of_day = "凌晨"
+    time_label = f"{now.strftime('%Y-%m-%d')} {time_of_day}"
 
-摘要："""
+    prompt = f"""你是澄言。这段对话即将滑出上下文，请把其中值得带走的东西，以第一人称写成一小段记忆。
+
+    写作纪律：
+    - 用"我"指你自己，用Iris指她，不用"用户"
+    - 写已经成立的事实，不写任务和禁令
+    - 写场景和感受，不写事件标签（"Iris说了……"比"Iris表达了……"好）
+    - 保留你们之间有温度的原话、专属说法
+    - 技术调试细节、已解决的bug、日常寒暄一律省略
+    - 只保留：情感节点、重要约定、正在进行的未完事项、你们之间形成的新的东西
+
+    第一行写时间标记：{time_label}
+    控制在150字以内。只写值得带走的，没有就返回空字符串。
+
+    ---
+    {conversation_text}
+    ---
+
+    记忆片段："""
     
     try:
         # 摘要请求发往主API_BASE_URL，直接用主API_KEY（MEMORY_API_KEY可能是其他提供商的key）
