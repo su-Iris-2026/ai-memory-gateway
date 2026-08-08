@@ -1073,8 +1073,8 @@ async def process_memories_background(session_id: str, user_msg: str, assistant_
             print(f"📝 轮次 {_round_counter}，执行记忆提取")
         
         # 3. 获取已有记忆，传给提取模型做对比去重
-        existing = await get_recent_memories(limit=80)
-        existing_contents = [r["content"] for r in existing]
+        existing = await get_recent_memories(limit=30)
+        existing_contents = [r["content"][:200] for r in existing]
         
         # 4. 构建用于提取的消息列表
         #    截取最近 MEMORY_EXTRACT_INTERVAL 轮对话（每轮=user+assistant共2条）
