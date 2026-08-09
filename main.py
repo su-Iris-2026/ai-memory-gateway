@@ -574,10 +574,9 @@ async def generate_summary(messages: list, session_id: str = "") -> str:
         content = msg['content'] if isinstance(msg['content'], str) else str(msg['content'])
         conversation_text += f"{role_label}: {content}\n\n"
     
-    from datetime import datetime
-    import pytz
+    from datetime import datetime, timezone, timedelta
 
-    now = datetime.now(pytz.timezone('Asia/Shanghai'))
+    now = datetime.now(timezone(timedelta(hours=8)))
     hour = now.hour
     if 5 <= hour < 12:
         time_of_day = "上午"
