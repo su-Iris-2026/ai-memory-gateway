@@ -708,7 +708,7 @@ async def consolidate_summaries(summary_parts: list) -> list:
 - 写场景和感受，不写标签和规则
 - 保留你们之间专属的说法、昵称
 - 去掉时间标记、技术细节、已解决的问题、日常流水
-- 控制在800字以内
+- 控制在1500字以内
 
 ---
 {old_text}
