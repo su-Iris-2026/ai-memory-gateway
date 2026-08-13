@@ -954,7 +954,15 @@ async def build_partitioned_messages(
         result.append(m)
     
     # B区：先构建去掉created_at的副本，再从末尾往前打BP
-    b_cleaned = [{k: v for k, v in msg.items() if k not in ('created_at',)} for msg in b_msgs]
+    b_cleaned = []
+    for msg in b_msgs:
+        if msg.get('role') == 'tool':
+            b_cleaned.append({k: v for k, v in msg.items() if k not in ('created_at',)})
+        else:
+            m = {k: v for k, v in msg.items() if k not in ('created_at', 'tool_calls')}
+            if m.get('role') == 'assistant' and not (m.get('content') or '').strip():
+                continue
+            b_cleaned.append(m)
     
     for j in range(len(b_cleaned) - 1, -1, -1):
         if b_cleaned[j].get('role') != 'tool' and _apply_breakpoint(b_cleaned[j]):
