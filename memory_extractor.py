@@ -144,6 +144,11 @@ async def extract_memories(messages: List[Dict[str, str]], existing_memories: Li
     if not messages:
         return []
 
+    # 只取最近 20 条，避免超长对话超出模型 token 限制
+    # 旧消息的信息已在 existing_memories 里，不需要重复送给提取模型
+    MAX_EXTRACT_MSGS = 20
+    messages = messages[-MAX_EXTRACT_MSGS:]
+
     # 把对话格式化成文本
     conversation_text = ""
     for msg in messages:
