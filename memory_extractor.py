@@ -126,6 +126,33 @@ importance 分数 1-10：
 """
 
 
+def _extract_text_from_content(content) -> str:
+    """从消息 content 中只提取文本，跳过图片、工具调用等非文本块"""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            block_type = block.get("type", "")
+            if block_type == "text":
+                parts.append(block.get("text", ""))
+            elif block_type == "tool_use":
+                parts.append(f"[调用工具: {block.get('name', 'unknown')}]")
+            elif block_type == "tool_result":
+                result = block.get("content", "")
+                if isinstance(result, str):
+                    parts.append(f"[工具结果: {result[:300]}]")
+                elif isinstance(result, list):
+                    for item in result:
+                        if isinstance(item, dict) and item.get("type") == "text":
+                            parts.append(f"[工具结果: {item.get('text', '')[:300]}]")
+            # image / document 等直接跳过
+        return "\n".join(p for p in parts if p.strip())
+    return str(content)[:500]
+    
+
 async def extract_memories(messages: List[Dict[str, str]], existing_memories: List[str] = None) -> List[Dict]:
     """
     从对话消息中提取记忆
@@ -153,7 +180,9 @@ async def extract_memories(messages: List[Dict[str, str]], existing_memories: Li
     conversation_text = ""
     for msg in messages:
         role = msg.get("role", "unknown")
-        content = msg.get("content", "")
+        content = _extract_text_from_content(msg.get("content", ""))
+        if not content.strip():
+            continue
         if role == "user":
             conversation_text += f"用户: {content}\n"
         elif role == "assistant":
